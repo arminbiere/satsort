@@ -394,19 +394,21 @@ encode (void)
 
   for (int i = 1; i < size_lines; i++)
     {
-      binary (output[i - 1][0], -output[i][0]);
-      binary (output[i - 1][0], sorted[i][1]);
-      binary (-output[i][0], sorted[i][1]);
+      binary (-output[i - 1][0], output[i][0]);
+      binary (-output[i - 1][0], sorted[i][1]);
+      binary (output[i][0], sorted[i][1]);
 
-      for (int j = 1; j + 1 < bits_per_line; j++)
+      const int n = bits_per_line;
+
+      for (int j = 1; j + 1 < n; j++)
 	{
-	  ternary (-sorted[i][j], output[i - 1][j], -output[i][j]);
-	  ternary (-sorted[i][j], output[i - 1][j], sorted[i][j + 1]);
-	  ternary (-sorted[i][j], -output[i][j], sorted[i][j + 1]);
+	  ternary (-sorted[i][j], -output[i - 1][j], output[i][j]);
+	  ternary (-sorted[i][j], -output[i - 1][j], sorted[i][j + 1]);
+	  ternary (-sorted[i][j], output[i][j], sorted[i][j + 1]);
 	}
 
-      binary (-sorted[i][size_lines - 1], output[i - 1][size_lines - 1]);
-      binary (-sorted[i][size_lines - 1], -output[i][size_lines - 1]);
+      binary (-sorted[i][n - 1], -output[i - 1][n - 1]);
+      binary (-sorted[i][n - 1], output[i][n - 1]);
     }
 
   verbose ("using %d variables", variables);
