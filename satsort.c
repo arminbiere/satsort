@@ -208,6 +208,66 @@ static int ** input;
 static int ** output;
 static int ** map;
 
+static int * tmp;
+static int size_tmp;
+static int capacity_tmp;
+
+static void
+push (int lit)
+{
+  assert (lit);
+
+  if (size_tmp == capacity_tmp)
+    {
+      capacity_tmp = capacity_tmp ? 2*capacity_tmp : 1;
+      tmp = realloc (tmp, capacity_tmp * sizeof *tmp);
+      if (!tmp)
+	die ("out-of-memory allocating temporary");
+    }
+
+  tmp[size_tmp++] = lit;
+}
+
+static void
+shift (int size)
+{
+  assert (size <= size_tmp);
+  for (int i = size; i < size_tmp; i++)
+    tmp[i-size] = tmp[i];
+  size_tmp -= size;
+}
+
+static void
+at_most_one (void)
+{
+  assert (size_tmp);
+  while (size_tmp > 1)
+    {
+      if (size_tmp == 2)
+	{
+	  binary (-tmp[0], -tmp[1]);
+	  shift (2);
+	}
+      else if (size_tmp == 3)
+	{
+	  binary (-tmp[0], -tmp[1]);
+	  binary (-tmp[0], -tmp[2]);
+	  binary (-tmp[1], -tmp[2]);
+	  shift (3);
+	}
+      else
+	{
+	  int lit = ++variables;
+	  binary (-tmp[0], -tmp[1]);
+	  binary (-tmp[0], -lit);
+	  binary (-tmp[1], -lit);
+	  shift (2);
+	  push (-lit);
+	}
+    }
+  size_tmp = 0;
+}
+
 static void
 encode (void)
 {
@@ -304,10 +364,12 @@ encode (void)
   // Make sure that the mapping is a permutation.
 
   for (int i = 0; i < size_lines; i++)
-    for (int j = 0; j < size_lines; j++)
-      for (int k = 0; k < size_lines; k++)
-	if (j < k)
-	  binary (-map[i][j], -map[i][k]);
+    {
+      assert (!size_tmp);
+      for (int j = 0; j < size_lines; j++)
+	push (map[i][j]);
+      at_most_one ();
+    }
 
   for (int i = 0; i < size_lines; i++)
     {
@@ -317,10 +379,12 @@ encode (void)
     }
 
   for (int i = 0; i < size_lines; i++)
-    for (int j = 0; j < size_lines; j++)
-      for (int k = 0; k < size_lines; k++)
-	if (j < k)
-	  binary (-map[j][i], -map[k][i]);
+    {
+      assert (!size_tmp);
+      for (int j = 0; j < size_lines; j++)
+	push (map[j][i]);
+      at_most_one ();
+    }
 
   for (int i = 0; i < size_lines; i++)
     {
@@ -406,8 +470,8 @@ print_output (void)
 static void
 reset (void)
 {
-
   free (buffer);
+  free (tmp);
 
   for (int i = 0; i < size_lines; i++)
     free (lines[i]);
