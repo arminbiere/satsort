@@ -1,5 +1,9 @@
-Sorting utility using the SAT solver Kissat used in a demo
-of
+Sorting utility based on the SAT solver Kissat used in a demo
+presented in the talk "Fueling the SAT Revolution" of the seminar 
+
+   Verified software: tools and experiments
+
+at the Isaac Newton Institute in June 2021.
 
 Install and compile 'kissat' in '../kissat' and run 'make'.
 
@@ -14,3 +18,6 @@ it into for instance 'kissat' directly
 
 but this will not allow you to get back the sorted input.
 
+
+Armin Biere
+Di Jun  8 18:24:51 CEST 2021
