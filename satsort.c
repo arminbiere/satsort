@@ -390,6 +390,25 @@ encode (void)
       literal (0);
     }
 
+#if 1
+
+  for (int i = 0; i < size_lines; i++)
+    {
+      assert (!size_tmp);
+      for (int j = 0; j < size_lines; j++)
+	push (map[j][i]);
+      at_most_one ();
+    }
+
+  for (int i = 0; i < size_lines; i++)
+    {
+      for (int j = 0; j < size_lines; j++)
+	literal (map[j][i]);
+      literal (0);
+    }
+
+#endif
+
   // Sorting constraints.
 
   for (int i = 1; i < size_lines; i++)
