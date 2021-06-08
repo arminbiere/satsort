@@ -430,36 +430,7 @@ solve (void)
 /*------------------------------------------------------------------------*/
 
 static void
-print_input (void)
-{
-  if (!verbosity)
-    return;
-  for (int i = 0; i < size_lines; i++)
-    {
-      printf ("c [satsort] input[%d] ", i);
-      int ch = 0;
-      for (int j = 0; j < bits_per_line; j++)
-	{
-	  int bit = 7 - (j % 8);
-	  int lit = input[i][j];
-	  int res = kissat_value (solver, lit);
-	  if (res == lit)
-	    ch |= 1 << bit;
-	  if (bit)
-	    continue;
-	  if (!ch)
-	    break;
-	  fputc (ch, stdout);
-	  ch = 0;
-	}
-      fputc ('\n', stdout);
-    }
-}
-
-/*------------------------------------------------------------------------*/
-
-static void
-print_output (void)
+print (void)
 {
   for (int i = 0; i < size_lines; i++)
     {
@@ -559,10 +530,7 @@ main (int argc, char **argv)
   if (!dimacs)
     {
       solve ();
-      if (verbosity)
-	print_input ();
-
-      print_output ();
+      print ();
     }
 
   reset ();
