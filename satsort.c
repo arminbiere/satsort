@@ -6,7 +6,6 @@ static const char *usage = "usage: satsort [-h] [-v] [-d] [ <input> ]\n";
 
 #include <assert.h>
 #include <ctype.h>
-#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +32,7 @@ die (const char *msg, ...)
 }
 
 static void
-verbose (const char * msg, ...)
+verbose (const char *msg, ...)
 {
   if (!verbosity)
     return;
@@ -98,7 +97,7 @@ parse (void)
 
       if (size_buffer == capacity_buffer)
 	{
-	  if (capacity_buffer >= 1<<29)
+	  if (capacity_buffer >= 1 << 29)
 	    die ("too many characters in line");
 	  capacity_buffer = capacity_buffer ? 2 * capacity_buffer : 1;
 	  buffer = realloc (buffer, capacity_buffer);
@@ -118,7 +117,7 @@ parse (void)
 
   if (size_lines == capacity_lines)
     {
-      if (capacity_lines >= 1<<29)
+      if (capacity_lines >= 1 << 29)
 	die ("too many lines");
       capacity_lines = capacity_lines ? 2 * capacity_lines : 1;
       lines = realloc (lines, capacity_lines * sizeof *lines);
@@ -196,19 +195,20 @@ get_actual_input_bit (int i, int j)
   assert (0 <= i), assert (i < size_lines);
   assert (0 <= j), assert (j < bits_per_line);
 
-  for (const char * p = lines[i]; *p; p++)
+  for (const char *p = lines[i]; *p; p++)
     for (int bit = 7; bit >= 0; bit--)
       if (!j--)
-	return !!((*p) & (1<<bit));
+	return ! !((*p) & (1 << bit));
 
   return 0;
 }
 
-static int ** input;
-static int ** output;
-static int ** map;
+static int **input;
+static int **map;
+static int **output;
+static int **sorted;
 
-static int * tmp;
+static int *tmp;
 static int size_tmp;
 static int capacity_tmp;
 
@@ -219,7 +219,7 @@ push (int lit)
 
   if (size_tmp == capacity_tmp)
     {
-      capacity_tmp = capacity_tmp ? 2*capacity_tmp : 1;
+      capacity_tmp = capacity_tmp ? 2 * capacity_tmp : 1;
       tmp = realloc (tmp, capacity_tmp * sizeof *tmp);
       if (!tmp)
 	die ("out-of-memory allocating temporary");
@@ -233,7 +233,7 @@ shift (int size)
 {
   assert (size <= size_tmp);
   for (int i = size; i < size_tmp; i++)
-    tmp[i-size] = tmp[i];
+    tmp[i - size] = tmp[i];
   size_tmp -= size;
 }
 
@@ -322,7 +322,19 @@ encode (void)
 	output[i][j] = ++variables;
     }
 
-  verbose ("using %d variables", variables);
+  sorted = malloc (size_lines * sizeof *sorted);
+  if (!sorted)
+    die ("out-of-memory allocating sorted table");
+  //sorted[0] = 0;
+  for (int i = 1; i < size_lines; i++)
+    {
+      sorted[i] = malloc (bits_per_line * sizeof *sorted[i]);
+      if (!output[i])
+	die ("out-of-memory allocating sorted[%d]", i);
+      //sorted[i][0] = 0;
+      for (int j = 1; j < bits_per_line; j++)
+	sorted[i][j] = ++variables;
+    }
 
   // Set-up solver.
 
@@ -380,6 +392,24 @@ encode (void)
 
   // Sorting constraints.
 
+  for (int i = 1; i < size_lines; i++)
+    {
+      binary (output[i - 1][0], -output[i][0]);
+      binary (output[i - 1][0], sorted[i][1]);
+      binary (-output[i][0], sorted[i][1]);
+
+      for (int j = 1; j + 1 < bits_per_line; j++)
+	{
+	  ternary (-sorted[i][j], output[i - 1][j], -output[i][j]);
+	  ternary (-sorted[i][j], output[i - 1][j], sorted[i][j + 1]);
+	  ternary (-sorted[i][j], -output[i][j], sorted[i][j + 1]);
+	}
+
+      binary (-sorted[i][size_lines - 1], output[i - 1][size_lines - 1]);
+      binary (-sorted[i][size_lines - 1], -output[i][size_lines - 1]);
+    }
+
+  verbose ("using %d variables", variables);
   verbose ("generated %d clauses", clauses);
 }
 
@@ -409,10 +439,10 @@ print_input (void)
       for (int j = 0; j < bits_per_line; j++)
 	{
 	  int bit = 7 - (j % 8);
-	  int lit = input [i][j];
+	  int lit = input[i][j];
 	  int res = kissat_value (solver, lit);
 	  if (res == lit)
-	    ch |= 1<<bit;
+	    ch |= 1 << bit;
 	  if (bit)
 	    continue;
 	  if (!ch)
@@ -435,10 +465,10 @@ print_output (void)
       for (int j = 0; j < bits_per_line; j++)
 	{
 	  int bit = 7 - (j % 8);
-	  int lit = output [i][j];
+	  int lit = output[i][j];
 	  int res = kissat_value (solver, lit);
 	  if (res == lit)
-	    ch |= 1<<bit;
+	    ch |= 1 << bit;
 	  if (bit)
 	    continue;
 	  if (!ch)
@@ -473,6 +503,10 @@ reset (void)
   for (int i = 0; i < size_lines; i++)
     free (output[i]);
   free (output);
+
+  for (int i = 1; i < size_lines; i++)
+    free (sorted[i]);
+  free (sorted);
 
   if (solver)
     kissat_release (solver);
@@ -524,7 +558,7 @@ main (int argc, char **argv)
     {
       solve ();
       if (verbosity)
-        print_input ();
+	print_input ();
 
       print_output ();
     }
