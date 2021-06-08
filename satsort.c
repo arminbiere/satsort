@@ -368,7 +368,7 @@ encode (void)
 	{
 	  int map_bit = map[i][j];
 	  int input_bit = input[i][k];
-	  int output_bit = output[i][k];
+	  int output_bit = output[j][k];
 	  ternary (-map_bit, -input_bit, output_bit);
 	  ternary (-map_bit, input_bit, -output_bit);
 	}
