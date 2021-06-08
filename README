@@ -1,0 +1,16 @@
+Sorting utility using the SAT solver Kissat used in a demo
+of
+
+Install and compile 'kissat' in '../kissat' and run 'make'.
+
+To sort run for instance
+
+   shuf organizers | ./satsort
+
+You can also generate CNF in DIMACS format instead and feed
+it into for instance 'kissat' directly
+
+   shuf organizers | ./satsort -d | kissat
+
+but this will not allow you to get back the sorted input.
+
