@@ -373,7 +373,7 @@ encode (void)
 	  ternary (-map_bit, input_bit, -output_bit);
 	}
 
-  // Make sure that the mapping is a permutation.
+  // Make sure mapping is injective.
 
   for (int i = 0; i < size_lines; i++)
     {
@@ -383,6 +383,8 @@ encode (void)
       at_most_one ();
     }
 
+  // Make sure mapping is surjective.
+
   for (int i = 0; i < size_lines; i++)
     {
       for (int j = 0; j < size_lines; j++)
@@ -390,7 +392,7 @@ encode (void)
       literal (0);
     }
 
-#if 1
+  // Also add that inverse map is injective.
 
   for (int i = 0; i < size_lines; i++)
     {
@@ -400,6 +402,8 @@ encode (void)
       at_most_one ();
     }
 
+  // Also add that inverse map is surjective.
+
   for (int i = 0; i < size_lines; i++)
     {
       for (int j = 0; j < size_lines; j++)
@@ -407,9 +411,7 @@ encode (void)
       literal (0);
     }
 
-#endif
-
-  // Sorting constraints.
+  // Sorting constraints (strict for now).
 
   for (int i = 1; i < size_lines; i++)
     {
