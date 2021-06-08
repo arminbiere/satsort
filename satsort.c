@@ -1,6 +1,6 @@
 // Copyright (c) 2021 Armin Biere Johannes Kepler University Linz Austria
 
-static const char *usage = "usage: satsort [-h] [-d] [ <input> ]\n";
+static const char *usage = "usage: satsort [-h] [-v] [-d] [ <input> ]\n";
 
 /*------------------------------------------------------------------------*/
 
@@ -17,6 +17,8 @@ static const char *usage = "usage: satsort [-h] [-d] [ <input> ]\n";
 
 /*------------------------------------------------------------------------*/
 
+static int verbosity;
+
 static void
 die (const char *msg, ...)
 {
@@ -27,6 +29,20 @@ die (const char *msg, ...)
   va_end (ap);
   fputc ('\n', stderr);
   exit (1);
+}
+
+static void
+verbose (const char * msg, ...)
+{
+  if (!verbosity)
+    return;
+  va_list ap;
+  fputs ("c [satsort] ", stdout);
+  va_start (ap, msg);
+  vprintf (msg, ap);
+  va_end (ap);
+  fputc ('\n', stdout);
+  fflush (stdout);
 }
 
 /*------------------------------------------------------------------------*/
@@ -119,7 +135,7 @@ void
 print_original (void)
 {
   for (int i = 0; i < size_lines; i++)
-    printf ("original[%d] %s\n", i, lines[i]);
+    verbose ("original[%d] %s", i, lines[i]);
 }
 
 /*------------------------------------------------------------------------*/
@@ -174,6 +190,9 @@ encode (void)
     }
   bits_per_line = max_line_length * 8;
 
+  verbose ("maximum line length %d", max_line_length);
+  verbose ("number of input-bits per line %d", bits_per_line);
+
   input = malloc (size_lines * sizeof *input);
   if (!input)
     die ("out-of-memory allocating input table");
@@ -210,8 +229,16 @@ encode (void)
 	output[i][j] = ++variables;
     }
 
+  verbose ("using %d variables", variables);
+
   if (!dimacs)
-    solver = kissat_init ();
+    {
+      solver = kissat_init ();
+      if (verbosity)
+	kissat_set_option (solver, "verbose", verbosity - 1);
+      else
+	kissat_set_option (solver, "quiet", 1);
+    }
 
   for (int i = 0; i < size_lines; i++)
     for (int j = 0; j < bits_per_line; j++)
@@ -228,9 +255,11 @@ encode (void)
 static void
 solve (void)
 {
+  verbose ("starting SAT solving");
   int res = kissat_solve (solver);
   if (res != 10)
     die ("unexpected solver result %d", res);
+  verbose ("finished SAT solving with result %d", res);
 }
 
 /*------------------------------------------------------------------------*/
@@ -280,6 +309,8 @@ main (int argc, char **argv)
 	fputs (usage, stdout), exit (0);
       else if (!strcmp (arg, "-d"))
 	dimacs = 1;
+      else if (!strcmp (arg, "-v"))
+	verbosity++;
       else if (*arg == '-')
 	die ("invalid option '%s' (try '-h')", arg);
       else if (path)
@@ -301,14 +332,18 @@ main (int argc, char **argv)
   if (close_file)
     fclose (file);
 
-  print_original ();
+  verbose ("parsed %d lines", size_lines);
+
+  if (verbosity)
+    print_original ();
 
   encode ();
 
   if (!dimacs)
     {
       solve ();
-      print_input ();
+      if (verbosity)
+        print_input ();
     }
 
   reset ();
