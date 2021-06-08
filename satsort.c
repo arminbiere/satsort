@@ -142,6 +142,7 @@ print_original (void)
 /*------------------------------------------------------------------------*/
 
 static int dimacs;
+static int clauses;
 static kissat *solver;
 
 static void
@@ -154,6 +155,9 @@ literal (int lit)
     }
   else
     kissat_add (solver, lit);
+
+  if (!lit)
+    clauses++;
 }
 
 static void
@@ -326,6 +330,8 @@ encode (void)
     }
 
   // Sorting constraints.
+
+  verbose ("generated %d clauses", clauses);
 }
 
 /*------------------------------------------------------------------------*/
