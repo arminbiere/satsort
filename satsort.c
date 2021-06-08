@@ -5,6 +5,7 @@ static const char *usage = "usage: satsort [-h] [-v] [-d] [ <input> ]\n";
 /*------------------------------------------------------------------------*/
 
 #include <assert.h>
+#include <ctype.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -144,15 +145,39 @@ static int dimacs;
 static kissat *solver;
 
 static void
-unit (int lit)
+literal (int lit)
 {
   if (dimacs)
-    printf ("%d 0\n", lit);
-  else
     {
-      kissat_add (solver, lit);
-      kissat_add (solver, 0);
+      printf ("%d", lit);
+      fputc (lit ? ' ' : '\n', stdout);
     }
+  else
+    kissat_add (solver, lit);
+}
+
+static void
+unit (int lit)
+{
+  literal (lit);
+  literal (0);
+}
+
+static void
+binary (int a, int b)
+{
+  literal (a);
+  literal (b);
+  literal (0);
+}
+
+static void
+ternary (int a, int b, int c)
+{
+  literal (a);
+  literal (b);
+  literal (c);
+  literal (0);
 }
 
 /*------------------------------------------------------------------------*/
@@ -162,7 +187,7 @@ static int bits_per_line;
 static int variables;
 
 static int
-bit (int i, int j)
+get_actual_input_bit (int i, int j)
 {
   assert (0 <= i), assert (i < size_lines);
   assert (0 <= j), assert (j < bits_per_line);
@@ -170,7 +195,7 @@ bit (int i, int j)
   for (const char * p = lines[i]; *p; p++)
     for (int bit = 7; bit >= 0; bit--)
       if (!j--)
-	return !!(*p & (1<<bit));
+	return !!((*p) & (1<<bit));
 
   return 0;
 }
@@ -240,14 +265,58 @@ encode (void)
 	kissat_set_option (solver, "quiet", 1);
     }
 
+  // Set the input literals to their corresponding value.
+
   for (int i = 0; i < size_lines; i++)
     for (int j = 0; j < bits_per_line; j++)
       {
-	if (bit (i, j))
+	if (get_actual_input_bit (i, j))
 	  unit (input[i][j]);
 	else
 	  unit (-input[i][j]);
       }
+
+  // Map the output literals to the input values.
+
+  for (int i = 0; i < size_lines; i++)
+    for (int j = 0; j < size_lines; j++)
+      for (int k = 0; k < bits_per_line; k++)
+	{
+	  int map_bit = map[i][j];
+	  int input_bit = input[i][k];
+	  int output_bit = output[i][k];
+	  ternary (-map_bit, -input_bit, output_bit);
+	  ternary (-map_bit, input_bit, -output_bit);
+	}
+
+  // Make sure that mapping is a permutation.
+
+  for (int i = 0; i < size_lines; i++)
+    for (int j = 0; j < size_lines; j++)
+      for (int k = 0; k < size_lines; k++)
+	if (j < k)
+	  binary (-map[i][j], -map[i][k]);
+
+  for (int i = 0; i < size_lines; i++)
+    {
+      for (int j = 0; j < size_lines; j++)
+	literal (map[i][j]);
+      literal (0);
+    }
+
+  for (int i = 0; i < size_lines; i++)
+    for (int j = 0; j < size_lines; j++)
+      for (int k = 0; k < size_lines; k++)
+	if (j < k)
+	  binary (-map[j][i], -map[k][i]);
+
+  for (int i = 0; i < size_lines; i++)
+    {
+      for (int j = 0; j < size_lines; j++)
+	literal (map[j][i]);
+      literal (0);
+    }
+
 }
 
 /*------------------------------------------------------------------------*/
@@ -267,6 +336,54 @@ solve (void)
 static void
 print_input (void)
 {
+  if (!verbosity)
+    return;
+  for (int i = 0; i < size_lines; i++)
+    {
+      printf ("c [satsort] input[%d] ", i);
+      int ch = 0;
+      for (int j = 0; j < bits_per_line; j++)
+	{
+	  int bit = 7 - (j % 8);
+	  int lit = input [i][j];
+	  int res = kissat_value (solver, lit);
+	  if (res == lit)
+	    ch |= 1<<bit;
+	  if (bit)
+	    continue;
+	  if (!ch)
+	    break;
+	  fputc (ch, stdout);
+	  ch = 0;
+	}
+      fputc ('\n', stdout);
+    }
+}
+
+/*------------------------------------------------------------------------*/
+
+static void
+print_output (void)
+{
+  for (int i = 0; i < size_lines; i++)
+    {
+      int ch = 0;
+      for (int j = 0; j < bits_per_line; j++)
+	{
+	  int bit = 7 - (j % 8);
+	  int lit = output [i][j];
+	  int res = kissat_value (solver, lit);
+	  if (res == lit)
+	    ch |= 1<<bit;
+	  if (bit)
+	    continue;
+	  if (!ch || !isprint (ch))
+	    break;
+	  fputc (ch, stdout);
+	  ch = 0;
+	}
+      fputc ('\n', stdout);
+    }
 }
 
 /*------------------------------------------------------------------------*/
@@ -344,6 +461,8 @@ main (int argc, char **argv)
       solve ();
       if (verbosity)
         print_input ();
+
+      print_output ();
     }
 
   reset ();
