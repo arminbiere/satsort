@@ -4,7 +4,7 @@ CFLAGS=-Wall -g
 all: satsort
 
 satsort: satsort.o ../kissat/build/libkissat.a makefile
-	$(CC) $(CFLAGS) -o $@ $< -L../kissat/build -lkissat
+	$(CC) $(CFLAGS) -o $@ $< -L../kissat/build -lkissat -lm
 satsort.o: satsort.c ../kissat/src/kissat.h makefile
 	$(CC) $(CFLAGS) -c -o $@ -I../kissat/src $<
 

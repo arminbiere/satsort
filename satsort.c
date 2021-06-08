@@ -1,10 +1,11 @@
 // Copyright (c) 2021 Armin Biere Johannes Kepler University Linz Austria
 
-static const char * usage = "usage: satsort [-h] [ <input> ]\n";
+static const char *usage = "usage: satsort [-h] [-d] [ <input> ]\n";
 
 /*------------------------------------------------------------------------*/
 
 #include <assert.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,22 +17,8 @@ static const char * usage = "usage: satsort [-h] [ <input> ]\n";
 
 /*------------------------------------------------------------------------*/
 
-static int close_file;
-static const char * path;
-static FILE * file;
-
-static char * buffer;
-static size_t size_buffer;
-static size_t capacity_buffer;
-
-static char ** lines;
-static size_t size_lines;
-static size_t capacity_lines;
-
-/*------------------------------------------------------------------------*/
-
 static void
-die (const char * msg, ...)
+die (const char *msg, ...)
 {
   va_list ap;
   fputs ("satsort: error: ", stderr);
@@ -44,8 +31,22 @@ die (const char * msg, ...)
 
 /*------------------------------------------------------------------------*/
 
+static int close_file;
+static const char *path;
+static FILE *file;
+
+static char *buffer;
+static int size_buffer;
+static int capacity_buffer;
+
+static char **lines;
+static int size_lines;
+static int capacity_lines;
+
+/*------------------------------------------------------------------------*/
+
 static void
-error (const char * msg, ...)
+error (const char *msg, ...)
 {
   va_list ap;
   fprintf (stderr, "satsort: parse error in '%s': ", path);
@@ -80,7 +81,9 @@ parse (void)
 
       if (size_buffer == capacity_buffer)
 	{
-	  capacity_buffer = capacity_buffer ? 2*capacity_buffer : 1;
+	  if (capacity_buffer >= 1<<29)
+	    die ("too many characters in line");
+	  capacity_buffer = capacity_buffer ? 2 * capacity_buffer : 1;
 	  buffer = realloc (buffer, capacity_buffer);
 	  if (!buffer)
 	    die ("out-of-memory reallocating line buffer");
@@ -89,7 +92,7 @@ parse (void)
       buffer[size_buffer++] = ch;
     }
 
-  char * line = malloc (size_buffer + 1);
+  char *line = malloc (size_buffer + 1);
   if (!line)
     die ("out-of-memory allocating line");
   memcpy (line, buffer, size_buffer);
@@ -98,7 +101,9 @@ parse (void)
 
   if (size_lines == capacity_lines)
     {
-      capacity_lines = capacity_lines ? 2*capacity_lines : 1;
+      if (capacity_lines >= 1<<29)
+	die ("too many lines");
+      capacity_lines = capacity_lines ? 2 * capacity_lines : 1;
       lines = realloc (lines, capacity_lines * sizeof *lines);
       if (!lines)
 	die ("out-of-memory reallocating lines array");
@@ -110,23 +115,171 @@ parse (void)
 
 /*------------------------------------------------------------------------*/
 
-static void
-print (void)
+void
+print_original (void)
 {
-  for (size_t i = 0; i < size_lines; i++)
-    printf ("%s\n", lines[i]);
+  for (int i = 0; i < size_lines; i++)
+    printf ("original[%d] %s\n", i, lines[i]);
+}
+
+/*------------------------------------------------------------------------*/
+
+static int dimacs;
+static kissat *solver;
+
+static void
+unit (int lit)
+{
+  if (dimacs)
+    printf ("%d 0\n", lit);
+  else
+    {
+      kissat_add (solver, lit);
+      kissat_add (solver, 0);
+    }
+}
+
+/*------------------------------------------------------------------------*/
+
+static int max_line_length;
+static int bits_per_line;
+static int variables;
+
+static int
+bit (int i, int j)
+{
+  assert (0 <= i), assert (i < size_lines);
+  assert (0 <= j), assert (j < bits_per_line);
+
+  for (const char * p = lines[i]; *p; p++)
+    for (int bit = 7; bit >= 0; bit--)
+      if (!j--)
+	return !!(*p & (1<<bit));
+
+  return 0;
+}
+
+static int ** input;
+static int ** output;
+static int ** map;
+
+static void
+encode (void)
+{
+  for (int i = 0; i < size_lines; i++)
+    {
+      const int length = strlen (lines[i]);
+      if (length > max_line_length)
+	max_line_length = length;
+    }
+  bits_per_line = max_line_length * 8;
+
+  input = malloc (size_lines * sizeof *input);
+  if (!input)
+    die ("out-of-memory allocating input table");
+  for (int i = 0; i < size_lines; i++)
+    {
+      input[i] = malloc (bits_per_line * sizeof *input[i]);
+      if (!input[i])
+	die ("out-of-memory allocating input[%d]", i);
+      for (int j = 0; j < bits_per_line; j++)
+	input[i][j] = ++variables;
+    }
+
+  map = malloc (size_lines * sizeof *map);
+  if (!map)
+    die ("out-of-memory allocating map table");
+  for (int i = 0; i < size_lines; i++)
+    {
+      map[i] = malloc (size_lines * sizeof *map[i]);
+      if (!map[i])
+	die ("out-of-memory allocating map[%d]", i);
+      for (int j = 0; j < size_lines; j++)
+	map[i][j] = ++variables;
+    }
+
+  output = malloc (size_lines * sizeof *output);
+  if (!output)
+    die ("out-of-memory allocating output table");
+  for (int i = 0; i < size_lines; i++)
+    {
+      output[i] = malloc (bits_per_line * sizeof *output[i]);
+      if (!output[i])
+	die ("out-of-memory allocating output[%d]", i);
+      for (int j = 0; j < bits_per_line; j++)
+	output[i][j] = ++variables;
+    }
+
+  if (!dimacs)
+    solver = kissat_init ();
+
+  for (int i = 0; i < size_lines; i++)
+    for (int j = 0; j < bits_per_line; j++)
+      {
+	if (bit (i, j))
+	  unit (input[i][j]);
+	else
+	  unit (-input[i][j]);
+      }
+}
+
+/*------------------------------------------------------------------------*/
+
+static void
+solve (void)
+{
+  int res = kissat_solve (solver);
+  if (res != 10)
+    die ("unexpected solver result %d", res);
+}
+
+/*------------------------------------------------------------------------*/
+
+static void
+print_input (void)
+{
+}
+
+/*------------------------------------------------------------------------*/
+
+static void
+reset (void)
+{
+
+  free (buffer);
+
+  for (int i = 0; i < size_lines; i++)
+    free (lines[i]);
+  free (lines);
+
+  for (int i = 0; i < size_lines; i++)
+    free (input[i]);
+  free (input);
+
+  for (int i = 0; i < size_lines; i++)
+    free (map[i]);
+  free (map);
+
+  for (int i = 0; i < size_lines; i++)
+    free (output[i]);
+  free (output);
+
+  if (solver)
+    kissat_release (solver);
 }
 
 /*------------------------------------------------------------------------*/
 
 int
-main (int argc, char ** argv)
+main (int argc, char **argv)
 {
   for (int i = 1; i < argc; i++)
     {
-      const char * arg = argv[i];
+      const char *arg = argv[i];
       if (!strcmp (arg, "-h"))
 	fputs (usage, stdout), exit (0);
+      else if (!strcmp (arg, "-d"))
+	dimacs = 1;
       else if (*arg == '-')
 	die ("invalid option '%s' (try '-h')", arg);
       else if (path)
@@ -141,17 +294,23 @@ main (int argc, char ** argv)
     die ("can not read '%s'", path);
   else
     close_file = 1;
+
   while (parse ())
     ;
+
   if (close_file)
     fclose (file);
 
-  print ();
+  print_original ();
 
-  free (buffer);
-  for (size_t i = 0; i < size_lines; i++)
-    free (lines[i]);
-  free (lines);
+  encode ();
 
+  if (!dimacs)
+    {
+      solve ();
+      print_input ();
+    }
+
+  reset ();
   return 0;
 }
