@@ -207,6 +207,8 @@ static int ** map;
 static void
 encode (void)
 {
+  // First compute the number of bytes and bits per line.
+
   for (int i = 0; i < size_lines; i++)
     {
       const int length = strlen (lines[i]);
@@ -217,6 +219,8 @@ encode (void)
 
   verbose ("maximum line length %d", max_line_length);
   verbose ("number of input-bits per line %d", bits_per_line);
+
+  // Now allocate variable tables.
 
   input = malloc (size_lines * sizeof *input);
   if (!input)
@@ -256,7 +260,11 @@ encode (void)
 
   verbose ("using %d variables", variables);
 
-  if (!dimacs)
+  // Set-up solver.
+
+  if (dimacs)
+    printf ("p cnf 0 0\n");
+  else
     {
       solver = kissat_init ();
       if (verbosity)
@@ -289,7 +297,7 @@ encode (void)
 	  ternary (-map_bit, input_bit, -output_bit);
 	}
 
-  // Make sure that mapping is a permutation.
+  // Make sure that the mapping is a permutation.
 
   for (int i = 0; i < size_lines; i++)
     for (int j = 0; j < size_lines; j++)
@@ -317,6 +325,7 @@ encode (void)
       literal (0);
     }
 
+  // Sorting constraints.
 }
 
 /*------------------------------------------------------------------------*/
@@ -377,7 +386,7 @@ print_output (void)
 	    ch |= 1<<bit;
 	  if (bit)
 	    continue;
-	  if (!ch || !isprint (ch))
+	  if (!ch)
 	    break;
 	  fputc (ch, stdout);
 	  ch = 0;
